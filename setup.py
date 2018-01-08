@@ -17,10 +17,12 @@ dependency_links = [
     ]
 install_requires = [
     'aiohttp<1.1.0',
+    'bs4',
     'discord',
     'psycopg2',
     'pyyaml',
     'sqlalchemy',
+    'requests',
     ]
 test_requires = [
     'pytest',

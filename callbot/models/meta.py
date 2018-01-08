@@ -15,12 +15,10 @@ NAMING_CONVENTION = {
     "pk": "pk_%(table_name)s"
 }
 
-''' Define MetaData, Base, and sessionmaker objects here.
 
-    >>> metadata = MetaData(naming_convention=NAMING_CONVENTION)
-    >>> Base = declarative_base(metadata=metadata)
-    >>> Session = sessionmaker()
-'''
+metadata = MetaData(naming_convention=NAMING_CONVENTION)
+CallBase = declarative_base(metadata=metadata)
+CallDBSession = sessionmaker()
 
 
 @contextmanager
@@ -51,3 +49,8 @@ def transaction(session_factory, commit=True):
     finally:
         logger.debug('close', extra=extra)
         session.close()
+
+
+def initialize_database():
+    CallBase.metadata.drop_all()
+    CallBase.metadata.create_all()

@@ -1,18 +1,15 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import configure_mappers
 
-''' Import Base and sessionmaker objects here.
-
-    >>> from .meta import (
-    >>>     Base,
-    >>>     Session,
-    >>>     )
-'''
-
-''' Import all model classes here.
-
-    >>> from .models import Model
-'''
+from .meta import (
+    CallBase,
+    CallDBSession,
+    )
+from .call_models import (
+    Call,
+    Coin,
+    Market,
+    )
 
 
 configure_mappers()
@@ -25,7 +22,4 @@ def configure_database_connection(base, session_factory, **cnx_settings):
 
 
 def configure(**settings):
-    ''' Configure schema objects here.
-
-        >>> configure_database_connection(Base, Session, **settings['schema'])
-    '''
+    configure_database_connection(CallBase, CallDBSession, **settings['calls'])

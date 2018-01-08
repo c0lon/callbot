@@ -2,6 +2,31 @@ import json
 import logging
 from pprint import pprint
 
+import aiohttp
+from bs4 import BeautifulSoup
+import requests
+
+
+def fetch_url(url, params=None):
+    logger = logging.getLogger(f'{__name__}.fetch_url')
+
+    params = params or {}
+    try:
+        response = requests.get(url, params=params)
+    except Exception as e:
+        logger.error(f'error fetching url ({url}): {e}', exc_info=True)
+        return False
+
+    if response.status_code != 200:
+        logger.error(f'non 200 response for url ({url}): {response}')
+        return False
+
+    return response
+
+
+def get_soup(html, parser='html.parser'):
+    return BeautifulSoup(html, parser)
+
 
 class GetLoggerMixin:
     ''' Adds a `_get_logger()` classmethod that returns the correctly
