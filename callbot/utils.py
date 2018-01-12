@@ -24,8 +24,8 @@ def fetch_url(url, params=None):
     return response
 
 
-def get_soup(html, parser='html.parser'):
-    return BeautifulSoup(html, parser)
+def get_percent_change(start_value, end_value):
+    return ((end_value - start_value) / start_value) * 100
 
 
 class GetLoggerMixin:

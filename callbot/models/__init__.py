@@ -8,8 +8,6 @@ from .meta import (
 from .call_models import (
     Call,
     Coin,
-    Market,
-    coin_markets,
     )
 
 
