@@ -7,8 +7,7 @@ import yaml
 
 from . import models
 
-''' Import anything you want available from the top-level module here.
-'''
+from .callbot import Callbot
 
 
 here = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))

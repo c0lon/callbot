@@ -19,6 +19,7 @@ install_requires = [
     'aiohttp<1.1.0',
     'bs4',
     'discord',
+    'hupper',
     'psycopg2',
     'pyyaml',
     'sqlalchemy',
@@ -34,6 +35,9 @@ data_files = [
 entry_points = {
     'console_scripts': [
         'initializedb = scripts.initialize_database:main',
+        'load-coins = scripts.load_coins:main',
+        'make-call = scripts.make_call:main',
+        'watch-calls = scripts.watch_calls:main',
     ]
 }
 

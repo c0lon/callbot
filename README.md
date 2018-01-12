@@ -39,3 +39,8 @@ reward: <REWARD_RATING>
 hold time: <HOLD_TIME>
 buy target: <BUY_TARGET>
 sell target: <SELL_TARGET>
+
+periodically prove price updates and alert to big changes or increases in volum
+
+run background task to update prices
+- integrate websocket apis?
