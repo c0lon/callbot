@@ -108,9 +108,9 @@ class Call(CallBase, GetLoggerMixin):
         if calls:
             embed = discord.Embed(title='All open calls')
             for call in calls:
-                value = f'{call.start_price_btc} -> {self.coin.current_price_btc} '
-                arrow = get_arrow(call.start_price_btc, self.coin.current_price_btc)
-                value += '{arrow}{abs(self.percent_change_btc)}'
+                value = f'{call.start_price_btc} -> {call.coin.current_price_btc} '
+                arrow = get_arrow(call.start_price_btc, call.coin.current_price_btc)
+                value += f'{arrow}{abs(call.percent_change_btc):.2f} %'
                 embed.add_field(name=call.coin.name, value=value, inline=False)
         else:
             embed = cls.get_no_open_calls_embed()
@@ -170,7 +170,7 @@ class Call(CallBase, GetLoggerMixin):
             embed.add_field(name='Current Price (BTC)',
                     value=f'{self.coin.current_price_btc:8.8f} BTC', inline=False)
 
-            arrow = get_arrow(self.start_price_btc, self.coin.current_price_btx)
+            arrow = get_arrow(self.start_price_btc, self.coin.current_price_btc)
             percent_change_value = f'{arrow}{self.percent_change_btc:.2f} %'
             embed.add_field(name='Percent change', value=percent_change_value, inline=False)
             embed.add_field(name='Call Made',
