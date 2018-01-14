@@ -86,9 +86,6 @@ class Callbot(GetLoggerMixin):
             logger.info(content)
             await self.bot.send_message(target, content)
 
-    async def show_help(self, message):
-        import pdb; pdb.set_trace()
-
     def run(self):
         self.bot.run(self.bot_token)
 

@@ -143,7 +143,7 @@ class Call(CallBase, GetLoggerMixin):
 
     def get_embed(self, made=False):
         embed = discord.Embed()
-        embed.add_field(name='Called', value=self.timestamp_made.strftime('%Y-%m-%d %H:%M:%S UTC'))
+        embed.add_field(name='Called', value=self.timestamp_made.strftime('%Y-%m-%d %H:%M UTC'))
         embed.set_thumbnail(url=self.coin.cmc_image_url)
 
         if made:
