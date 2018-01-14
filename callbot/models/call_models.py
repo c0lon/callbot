@@ -143,25 +143,26 @@ class Call(CallBase, GetLoggerMixin):
 
     def get_embed(self, made=False):
         embed = discord.Embed()
-        embed.add_field(name='Called', value=self.timestamp_made.strftime('%Y-%m-%d %H:%M UTC'))
         embed.set_thumbnail(url=self.coin.cmc_image_url)
 
         if made:
             embed.title=f'Call made on {self.coin.name} ({self.coin.symbol})'
             embed.url=self.coin.cmc_url
             embed.add_field(name='Price (BTC)',
-                    value=f'{self.start_price_btc:8.8f} BTC')
+                    value=f'{self.start_price_btc:8.8f} BTC', inline=False)
         else:
             embed.title=f'Call on {self.coin.name} ({self.coin.symbol})'
             embed.url=self.coin.cmc_url
-            embed.add_field(name='Call price (BTC)',
+            embed.add_field(name='Call Price (BTC)',
                     value=f'{self.start_price_btc:8.8f} BTC')
 
             # show current prices and percent change
-            embed.add_field(name='Current price (BTC)',
+            embed.add_field(name='Current Price (BTC)',
                     value=f'{self.coin.current_price_btc:8.8f} BTC', inline=False)
             embed.add_field(name='Percent change',
                     value=f'{self.percent_change_btc:.2f} %', inline=False)
+            embed.add_field(name='Call Made',
+                    value=self.timestamp_made.strftime('%Y-%m-%d %H:%M UTC'), inline=False)
 
         return embed
 
