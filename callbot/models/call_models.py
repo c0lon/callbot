@@ -108,7 +108,7 @@ class Call(CallBase, GetLoggerMixin):
         if calls:
             embed = discord.Embed(title='All open calls')
             for call in calls:
-                value = f'{call.start_price_btc} -> {call.coin.current_price_btc} '
+                value = f'{call.start_price_btc:.8f} -> {call.coin.current_price_btc:.8f} '
                 arrow = get_arrow(call.start_price_btc, call.coin.current_price_btc)
                 value += f'{arrow}{abs(call.percent_change_btc):.2f} %'
                 embed.add_field(name=call.coin.name, value=value, inline=False)
