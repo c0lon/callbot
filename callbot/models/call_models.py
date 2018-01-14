@@ -37,6 +37,7 @@ COINMARKETCAP_API_URL_BASE = 'https://api.coinmarketcap.com/v1'
 COINMARKETCAP_API_TICKER_URL = COINMARKETCAP_API_URL_BASE + '/ticker'
 COINMARKETCAP_API_COIN_URL_FMT = COINMARKETCAP_API_TICKER_URL + '/{cmc_id}'
 
+TIMESTAMP_FMT = '%Y-%m-%d %H:%M UTC'
 
 class Call(CallBase, GetLoggerMixin):
     """ Model of a call made on a coin.
@@ -162,7 +163,7 @@ class Call(CallBase, GetLoggerMixin):
             embed.add_field(name='Percent change',
                     value=f'{self.percent_change_btc:.2f} %', inline=False)
             embed.add_field(name='Call Made',
-                    value=self.timestamp_made.strftime('%Y-%m-%d %H:%M UTC'), inline=False)
+                    value=self.timestamp_made.strftime(TIMESTAMP_FMT), inline=False)
 
         return embed
 
@@ -183,6 +184,7 @@ class Call(CallBase, GetLoggerMixin):
                 value=f'{self.final_price_btc:8.8f}', inline=False)
         embed.add_field(name='Total percent change (BTC)',
                 value=f'{self.percent_change_btc:.2f} %', inline=False)
+        embed.add_field(name='Call Made', value=self.timestamp_made.strftime(TIMESTAMP_FMT), inline=False)
 
         return embed
 
