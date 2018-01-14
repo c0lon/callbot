@@ -28,10 +28,14 @@ from ..utils import (
     pp,
     )
 
+COINMARKETCAP_URL_BASE = 'https://coinmarketcap.com'
+COINMARKETCAP_COIN_URL_FMT = COINMARKETCAP_URL_BASE + '/currencies/{cmc_id}'
+COINMARKETCAP_COIN_MARKETS_URL_FMT = COINMARKETCAP_COIN_URL_FMT + '/#markets'
+COINMARKETCAP_COIN_IMG_URL_FMT = 'https://files.coinmarketcap.com/static/img/coins/32x32/{cmc_id}.png'
 
 COINMARKETCAP_API_URL_BASE = 'https://api.coinmarketcap.com/v1'
 COINMARKETCAP_API_TICKER_URL = COINMARKETCAP_API_URL_BASE + '/ticker'
-COINMARKETCAP_API_COIN_URL_FMT = COINMARKETCAP_API_TICKER_URL + '/{coin}'
+COINMARKETCAP_API_COIN_URL_FMT = COINMARKETCAP_API_TICKER_URL + '/{cmc_id}'
 
 
 class Call(CallBase, GetLoggerMixin):
@@ -43,26 +47,37 @@ class Call(CallBase, GetLoggerMixin):
     channel_id = Column(Text, index=True)
     author_id = Column(Text, index=True)
     start_price_btc = Column(Float)
-    start_price_usd = Column(Float)
     final_price_btc = Column(Float)
-    final_price_usd = Column(Float)
-    percent_change_btc = Column(Float)
-    percent_change_usd = Column(Float)
+    total_percent_change_btc = Column(Float)
     closed = Column(Integer, server_default=text("'0'"), index=True)
     timestamp_made = Column(DateTime, default=datetime.utcnow)
     timestamp_closed = Column(DateTime)
 
     coin = relationship('Coin', foreign_keys=[coin_id], lazy='joined')
 
+    def get_percent_change_btc(self):
+        return get_percent_change(self.start_price_btc, self.coin.current_price_btc)
+    percent_change_btc = property(get_percent_change_btc)
+
     @classmethod
-    def make(cls, session, coin):
+    def get_no_open_calls_embed(cls, coin=None):
+        if coin:
+            embed = discord.Embed(title=f'No open calls on {coin.name}')
+            embed.set_thumbnail(url=coin.cmc_image_url)
+        else:
+            embed = discord.Embed(title='No open calls')
+
+        return embed
+
+    @classmethod
+    def make(cls, session, coin, message):
         logger = cls._logger('make_quick_call')
         logger.debug(coin.name)
 
-        price_btc, price_usd = coin.get_cmc_price()
         call = cls(
-            start_price_btc=price_btc,
-            start_price_usd=price_usd
+            start_price_btc=coin.current_price_btc,
+            channel_id=message.channel.id,
+            author_id=message.author.id
         )
         call.coin = coin
         session.add(call)
@@ -84,7 +99,7 @@ class Call(CallBase, GetLoggerMixin):
                 embed.add_field(name=call.coin.name,
                         value=f'{call.start_price_btc:8.8f} BTC')
         else:
-            embed = discord.Embed(title='No open calls')
+            embed = cls.get_no_open_calls_embed()
 
         return embed
 
@@ -95,48 +110,91 @@ class Call(CallBase, GetLoggerMixin):
                 .filter(cls.closed == 0) \
                 .first()
 
+    @classmethod
+    def get_last(cls, session):
+        return session.query(cls) \
+                .filter(cls.closed == 0) \
+                .order_by(cls.timestamp_made.desc()) \
+                .first()
+
+    @classmethod
+    def get_last_embed(cls, session):
+        call = cls.get_last(session)
+        if call:
+            response = call.get_embed()
+        else:
+            response = cls.get_no_open_calls_embed()
+
+        return response
+
+    @classmethod
+    def get_by_coin_embed(cls, session, coin):
+        call = cls.get_by_coin(session, coin)
+        if call:
+            embed = call.get_embed()
+        else:
+            embed = get_no_open_calls_embed(coin=coin)
+
+        return embed
+
     def get_embed(self, made=False):
         if made:
-            embed = discord.Embed(title=f'Call made on {self.coin.name} ({self.coin.symbol})')
+            embed = discord.Embed(title=f'Call made on {self.coin.name} ({self.coin.symbol})',
+                    url=self.coin.cmc_url)
             embed.add_field(name='Price (BTC)',
                     value=f'{self.start_price_btc:8.8f} BTC')
-            #embed.add_field(name='Price (USD)',
-                    #value=f'{self.start_price_usd} USD')
         else:
-            embed = discord.Embed(title=f'Call on {self.coin.name} ({self.coin.symbol})')
+            embed = discord.Embed(title=f'Call on {self.coin.name} ({self.coin.symbol})',
+                    url=self.coin.cmc_url)
             embed.add_field(name='Call price (BTC)',
                     value=f'{self.start_price_btc:8.8f} BTC')
-            #embed.add_field(name='Call price (USD)',
-                    #value=f'{self.start_price_usd} USD')
 
             # show current prices and percent change
-            current_price_btc, current_price_usd = self.coin.get_cmc_price()
-            percent_change_btc = get_percent_change(self.start_price_btc, current_price_btc)
-            percent_change_usd = get_percent_change(self.start_price_usd, current_price_usd)
             embed.add_field(name='Current price (BTC)',
-                    value=f'{current_price_btc:8.8f} BTC')
-            embed.add_field(name='Percent change', value=f'{percent_change_btc:.2f} %')
-            #embed.add_field(name='Current price (USD)',
-                    #value=f'{current_price_usd} USD', inline=True)
+                    value=f'{self.coin.current_price_btc:8.8f} BTC', inline=False)
+            embed.add_field(name='Percent change',
+                    value=f'{self.percent_change_btc:.2f} %', inline=False)
 
+        embed.set_thumbnail(url=self.coin.cmc_image_url)
         return embed
 
     def close(self, session):
         self.closed = 1
+        self.final_price_btc = self.coin.current_price_btc
+        self.total_percent_change_btc = self.percent_change_btc
 
-        self.final_price_btc, self.final_price_usd = self.coin.get_cmc_price()
-        self.percent_change_btc = get_percent_change(self.start_price_btc, self.final_price_btc)
-        self.percent_change_usd = get_percent_change(self.start_price_usd, self.final_price_usd)
-
-    def get_close_embed(self, session):
+    def close_embed(self, session):
         self.close(session)
 
-        embed = discord.Embed(title=f'Call closed on {self.coin.name} ({self.coin.symbol})')
-        embed.add_field(name='Call price (BTC)', value=f'{self.start_price_btc:8.8f}')
-        embed.add_field(name='Final price (BTC)', value=f'{self.final_price_btc:8.8f}')
-        embed.add_field(name='Total percent change (BTC)', value=f'{self.percent_change_btc:.2f} %')
+        embed = discord.Embed(title=f'Call closed on {self.coin.name} ({self.coin.symbol})',
+                url=self.coin.cmc_url)
+        embed.set_thumbnail(url=self.coin.cmc_image_url)
+        embed.add_field(name='Call price (BTC)',
+                value=f'{self.start_price_btc:8.8f}')
+        embed.add_field(name='Final price (BTC)',
+                value=f'{self.final_price_btc:8.8f}', inline=False)
+        embed.add_field(name='Total percent change (BTC)',
+                value=f'{self.percent_change_btc:.2f} %', inline=False)
 
         return embed
+
+    @classmethod
+    def close_by_coin_embed(cls, session, message, coin):
+        call = cls.get_by_coin(session, coin)
+        if not call:
+            embed = cls.get_no_open_calls_embed(coin=coin)
+        elif call.author_id != message.author.id:
+            embed = self.get_close_not_allowed_embed(message)
+        else:
+            embed = call.close_embed(session)
+
+        return embed
+
+    def get_closed_not_allowed_embed(self, message):
+        caller = discord.utils.find(message.server.members, id=self.author_id)
+
+        title = f'Call on {self.coin.name} can only be closed by {caller.name}'
+        return discord.Embed(title=title)
 
 
 class Coin(CallBase, GetLoggerMixin):
@@ -147,6 +205,18 @@ class Coin(CallBase, GetLoggerMixin):
     name = Column(Text, index=True)
     symbol = Column(Text, index=True)
     cmc_id = Column(Text)
+
+    def get_cmc_url(self):
+        return COINMARKETCAP_COIN_MARKETS_URL_FMT.format(cmc_id=self.cmc_id)
+    cmc_url = property(get_cmc_url)
+
+    def get_cmc_api_url(self):
+        return COINMARKETCAP_API_COIN_URL_FMT.format(cmc_id=self.cmc_id)
+    cmc_api_url = property(get_cmc_api_url)
+
+    def get_cmc_image_url(self):
+        return COINMARKETCAP_COIN_IMG_URL_FMT.format(cmc_id=self.cmc_id)
+    cmc_image_url = property(get_cmc_image_url)
 
     @classmethod
     def get_by_name(cls, session, coin_name):
@@ -162,8 +232,7 @@ class Coin(CallBase, GetLoggerMixin):
 
     @classmethod
     def add_from_name(cls, session, coin_name):
-        cmc_api_url = COINMARKETCAP_API_COIN_URL_FMT.format(coin=coin_name)
-        api_response = fetch_url(cmc_api_url)
+        api_response = fetch_url(self.cmc_api_url)
         if not api_response:
             return
 
@@ -198,12 +267,11 @@ class Coin(CallBase, GetLoggerMixin):
 
         return coin
 
-    def get_cmc_price(self):
+    def get_current_price_btc(self):
         logger = self._logger('get_prices')
         logger.debug(self.name)
 
-        cmc_url = COINMARKETCAP_API_COIN_URL_FMT.format(coin=self.cmc_id)
-        api_response = fetch_url(cmc_url)
+        api_response = fetch_url(self.cmc_api_url)
         if not api_response:
             return
         ticker = api_response.json()[0]
@@ -214,13 +282,10 @@ class Coin(CallBase, GetLoggerMixin):
         except:
             logger.warning(f'{self.name} BTC price is NULL')
             price_btc = None
-        try:
-            price_usd = float(ticker['price_usd'])
-        except:
-            logger.warning(f'{self.name} USD price is NULL')
-            price_usd = None
 
-        return price_btc, price_usd
+        return price_btc
+
+    current_price_btc = property(get_current_price_btc)
 
     @classmethod
     def find_by_string(cls, session, coin_string):
@@ -253,13 +318,24 @@ class Coin(CallBase, GetLoggerMixin):
         )).all()
 
     @classmethod
+    def get_not_found_embed(cls, coin_string):
+        return discord.Embed(title=f'No coins found for "{coin_string}".')
+
+    @classmethod
+    def get_multiple_matches_embed(cls, coin_string, coin_matches):
+        embed = discord.Embed(title=f'Multiple coins found for "{coin_string}".')
+        coin_matches_string = '\n'.join([f'{cm.name} ({cm.symbol})' for cm in coin_matches])
+        embed.add_field(name='Coins', value=coin_matches_string)
+
+        return embed
+
+    @classmethod
     def find_one_by_string(self, session, coin_string):
         coin_matches = Coin.find_by_string(session, coin_string)
         if not coin_matches:
-            response = f'No coin matches for "{coin_string}".'
+            response = Coin.get_not_found_embed(coin_string)
         elif len(coin_matches) > 1:
-            response = f'Multiple matches for "{coin_string}".'
-            response += '\n{}'.format('\n'.join([cm.name for cm in coin_matches]))
+            response = Coin.get_multiple_matches_embed(coin_string, coin_matches)
         else:
             response = coin_matches[0]
 

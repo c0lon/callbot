@@ -38,6 +38,7 @@ entry_points = {
         'load-coins = scripts.load_coins:main',
         'make-call = scripts.make_call:main',
         'watch-calls = scripts.watch_calls:main',
+        'reset-project = scripts.reset:main',
     ]
 }
 
