@@ -81,6 +81,7 @@ class Call(CallBase, GetLoggerMixin):
         )
         call.coin = coin
         session.add(call)
+        session.flush()
 
         return call
 
@@ -133,19 +134,23 @@ class Call(CallBase, GetLoggerMixin):
         if call:
             embed = call.get_embed()
         else:
-            embed = get_no_open_calls_embed(coin=coin)
+            embed = cls.get_no_open_calls_embed(coin=coin)
 
         return embed
 
     def get_embed(self, made=False):
+        embed = discord.Embed()
+        embed.add_field(name='Called', value=self.timestamp_made.strftime('%Y-%m-%d %H:%M:%S UTC'))
+        embed.set_thumbnail(url=self.coin.cmc_image_url)
+
         if made:
-            embed = discord.Embed(title=f'Call made on {self.coin.name} ({self.coin.symbol})',
-                    url=self.coin.cmc_url)
+            embed.title=f'Call made on {self.coin.name} ({self.coin.symbol})'
+            embed.url=self.coin.cmc_url
             embed.add_field(name='Price (BTC)',
                     value=f'{self.start_price_btc:8.8f} BTC')
         else:
-            embed = discord.Embed(title=f'Call on {self.coin.name} ({self.coin.symbol})',
-                    url=self.coin.cmc_url)
+            embed.title=f'Call on {self.coin.name} ({self.coin.symbol})'
+            embed.url=self.coin.cmc_url
             embed.add_field(name='Call price (BTC)',
                     value=f'{self.start_price_btc:8.8f} BTC')
 
@@ -155,7 +160,6 @@ class Call(CallBase, GetLoggerMixin):
             embed.add_field(name='Percent change',
                     value=f'{self.percent_change_btc:.2f} %', inline=False)
 
-        embed.set_thumbnail(url=self.coin.cmc_image_url)
         return embed
 
     def close(self, session):
