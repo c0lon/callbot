@@ -39,6 +39,9 @@ COINMARKETCAP_API_COIN_URL_FMT = COINMARKETCAP_API_TICKER_URL + '/{cmc_id}'
 
 
 class Call(CallBase, GetLoggerMixin):
+    """ Model of a call made on a coin.
+    """
+
     __tablename__ = 'calls'
     __loggername__ = f'{__name__}.Call'
 
@@ -62,7 +65,7 @@ class Call(CallBase, GetLoggerMixin):
     @classmethod
     def get_no_open_calls_embed(cls, coin=None):
         if coin:
-            embed = discord.Embed(title=f'No open calls on {coin.name}')
+            embed = discord.Embed(title=f'No open calls on {coin.name}', url=self.coin.cmc_url)
             embed.set_thumbnail(url=coin.cmc_image_url)
         else:
             embed = discord.Embed(title='No open calls')
@@ -196,12 +199,17 @@ class Call(CallBase, GetLoggerMixin):
 
     def get_closed_not_allowed_embed(self, message):
         caller = discord.utils.find(message.server.members, id=self.author_id)
-
         title = f'Call on {self.coin.name} can only be closed by {caller.name}'
-        return discord.Embed(title=title)
+        embed = discord.Embed(title=title, url=self.coin.cmc_url)
+        embed.set_thumbnail(url=self.coin.cmc_image_url)
+
+        return embed
 
 
 class Coin(CallBase, GetLoggerMixin):
+    """ Model of a Coin on Coinmarketcap.
+    """
+
     __tablename__ = 'coins'
     __loggername__ = f'{__name__}.Coin'
 
