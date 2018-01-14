@@ -1,3 +1,9 @@
+""" TODO
+- add arrows for percentages
+- add more info to `!call list`
+"""
+
+
 from collections import namedtuple
 from datetime import datetime
 from queue import Queue
@@ -24,6 +30,7 @@ from .meta import CallBase
 from ..utils import (
     GetLoggerMixin,
     fetch_url,
+    get_arrow,
     get_percent_change,
     pp,
     )
@@ -101,8 +108,10 @@ class Call(CallBase, GetLoggerMixin):
         if calls:
             embed = discord.Embed(title='All open calls')
             for call in calls:
-                embed.add_field(name=call.coin.name,
-                        value=f'{call.start_price_btc:8.8f} BTC')
+                value = f'{call.start_price_btc} -> {self.coin.current_price_btc} '
+                arrow = get_arrow(call.start_price_btc, self.coin.current_price_btc)
+                value += '{arrow}{abs(self.percent_change_btc)}'
+                embed.add_field(name=call.coin.name, value=value, inline=False)
         else:
             embed = cls.get_no_open_calls_embed()
 
@@ -160,8 +169,10 @@ class Call(CallBase, GetLoggerMixin):
             # show current prices and percent change
             embed.add_field(name='Current Price (BTC)',
                     value=f'{self.coin.current_price_btc:8.8f} BTC', inline=False)
-            embed.add_field(name='Percent change',
-                    value=f'{self.percent_change_btc:.2f} %', inline=False)
+
+            arrow = get_arrow(self.start_price_btc, self.coin.current_price_btx)
+            percent_change_value = f'{arrow}{self.percent_change_btc:.2f} %'
+            embed.add_field(name='Percent change', value=percent_change_value, inline=False)
             embed.add_field(name='Call Made',
                     value=self.timestamp_made.strftime(TIMESTAMP_FMT), inline=False)
 

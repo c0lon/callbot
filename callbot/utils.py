@@ -7,6 +7,19 @@ from bs4 import BeautifulSoup
 import requests
 
 
+GREEN_ARROW_UP = '<:arup:361777443343958017>'
+RED_ARROW_DOWN = '<:ardn:361785982921736192>'
+
+
+def get_arrow(initial_value, final_value):
+    if final_value > initial_value:
+        return GREEN_ARROW_UP
+    elif final_value == initial_value:
+        return ''
+    else:
+        return RED_ARROW_DOWN
+
+
 def fetch_url(url, params=None):
     logger = logging.getLogger(f'{__name__}.fetch_url')
 
