@@ -88,6 +88,8 @@ class Call(CallBase, GetLoggerMixin):
         for member in ctx.message.server.members:
             if string == member.name.lower():
                 return member.id
+            if member.nick and string == member.nick.lower():
+                return member.id
 
         return ctx.message.author.id
 
