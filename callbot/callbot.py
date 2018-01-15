@@ -112,6 +112,14 @@ class Callbot(GetLoggerMixin):
         async def on_ready():
             logger.debug('start')
 
+        @callbot.bot.event
+        async def on_message(message):
+            """ Do any preprocessing here.
+
+            Restrict to certain channels?
+            """
+            await callbot.bot.process_commands(message)
+
         @callbot.bot.command(pass_context=True)
         async def make(ctx, coin : str):
             """ Make a call.
