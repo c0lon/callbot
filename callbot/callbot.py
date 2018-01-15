@@ -21,60 +21,59 @@ class Callbot(GetLoggerMixin):
         self.bot_token = config['token']
         self.debug = config.get('debug', False)
 
-    async def make_call(self, message, coin_string):
+    async def make_call(self, ctx, coin_string):
         logger = self._logger('make_call')
         logger.debug(coin_string)
 
         with transaction(CallDBSession) as session:
             coin = Coin.find_one_by_string(session, coin_string)
             if isinstance(coin, Coin):
-                call = Call.get_by_coin(session, coin)
+                call = Call.get_by_coin_and_caller(session, coin, ctx.message.author.id)
                 if call:
-                    msg = f'{message.author.mention} There is already an open call on {coin.name}.'
-                    await self.respond(message.channel, msg)
-                    response = call.get_embed()
+                    msg = f'{ctx.message.author.mention} You already have an open call on {coin.name}.'
+                    await self.respond(ctx.message.channel, msg)
+                    response = call.get_embed(session, ctx)
                 else:
-                    call = Call.make(session, coin, message)
-                    response = call.get_embed(made=True)
+                    response = Call.make_embed(session, ctx, coin)
             else:
                 response = coin
 
-            await self.respond(message.channel, response)
+            await self.respond(ctx.message.channel, response)
 
-    async def show_call(self, message, coin_string):
+    async def show_call(self, ctx, coin_string, prices_in='btc', caller_id=None):
         logger = self._logger('show_call')
         logger.debug(coin_string)
 
         with transaction(CallDBSession) as session:
             coin = Coin.find_one_by_string(session, coin_string)
             if isinstance(coin, Coin):
-                response = Call.get_by_coin_embed(session, coin)
+                response = coin.get_calls_embed(session, ctx, prices_in=prices_in, caller_id=caller_id)
             else:
                 response = coin
 
-            await self.respond(message.channel, response)
+            await self.respond(ctx.message.channel, response)
 
-    async def show_last_call(self, message):
+    async def show_last_call(self, ctx, caller_id=None):
         logger = self._logger('show_last_call')
 
         with transaction(CallDBSession) as session:
-            response = Call.get_last_embed(session)
-            await self.respond(message.channel, response)
+            response = Call.get_last_embed(session, ctx, caller_id=caller_id)
+            await self.respond(ctx.message.channel, response)
 
-    async def list_all_calls(self, message):
+    async def list_all_calls(self, ctx, prices_in='btc', caller_id=None):
         with transaction(CallDBSession) as session:
-            response = Call.get_all_open_embed(session)
-            await self.respond(message.channel, response)
+            response = Call.get_all_open_embed(session, ctx, prices_in=prices_in, caller_id=caller_id)
+            await self.respond(ctx.message.channel, response)
 
-    async def close_call(self, message, coin_string):
+    async def close_call(self, ctx, coin_string):
         with transaction(CallDBSession) as session:
             coin = Coin.find_one_by_string(session, coin_string)
             if isinstance(coin, Coin):
-                response = Call.close_by_coin_embed(session, message, coin)
+                response = coin.close_call_by_caller(session, ctx)
             else:
                 response = coin
 
-            await self.respond(message.channel, response)
+            await self.respond(ctx.message.channel, response)
 
     async def respond(self, target, content):
         logger = self._logger('respond')
@@ -90,6 +89,21 @@ class Callbot(GetLoggerMixin):
         self.bot.run(self.bot_token)
 
     @classmethod
+    def get_kwargs_from_args(cls, ctx, *args):
+        prices_in = 'btc'
+        caller_id = ctx.message.author.id
+        for arg in args:
+            if arg.lower() in ['btc', 'usd']:
+                prices_in = arg.lower()
+            else:
+                caller_id = Call.get_caller_id_from_string(ctx, arg)
+
+        return {
+            'prices_in' : prices_in,
+            'caller_id' : caller_id,
+        }
+
+    @classmethod
     def watch_calls(cls, **config):
         callbot = cls(**config['bot'])
         logger = cls._logger('watch_calls')
@@ -100,42 +114,65 @@ class Callbot(GetLoggerMixin):
 
         @callbot.bot.command(pass_context=True)
         async def make(ctx, coin : str):
-            """ Make a call. The price listed on Coinmarketcap will be recorded.
-            Check the status of a call with `show`.
-            Close a call with `close`.
+            """ Make a call.
+            The current price listed on Coinmarketcap will be recorded.
 
-            Parameters:
-                coin: The coin to make a call on
+            Arguments:
+                [Required] coin: The coin to make a call on
             """
-            await callbot.make_call(ctx.message, coin)
+            await callbot.make_call(ctx, coin)
 
         @callbot.bot.command(pass_context=True)
-        async def show(ctx, coin : str):
+        async def show(ctx, coin : str, *args):
             """ Show the status of an open call. The current price is compared to
             the price recorded when the call was made.
 
-            Parameters:
-                coin: The coin to check the call status of
+            Arguments:
+                [Required] coin: The coin to check the call status of
+                caller:
+                   show the open call on the given coin by the given caller
+                   defaults to you
+
+            Options:
+                all: show all open calls on the given coin
+                btc: show prices in BTC (default)
+                usd: show prices in USD
             """
-            await callbot.show_call(ctx.message, coin)
+            kwargs = cls.get_kwargs_from_args(ctx, *args)
+            await callbot.show_call(ctx, coin, **kwargs)
 
         @callbot.bot.command(pass_context=True)
-        async def showlast(ctx):
-            """ Show the last call made. """
-            await callbot.show_last_call(ctx.message)
+        async def showlast(ctx, caller=None):
+            """ Show the last call made.
+
+            Arguments:
+                caller: show the last call made by the given caller
+            """
+            caller_id = Call.get_caller_id_from_string(ctx, caller)
+            await callbot.show_last_call(ctx, caller_id=caller_id)
 
         @callbot.bot.command(pass_context=True)
-        async def list(ctx):
-            """ Show all open calls. """
-            await callbot.list_all_calls(ctx.message)
+        async def list(ctx, *args):
+            """ List open calls. If no options are given, lists your open calls.
+
+            Arguments:
+                caller: show calls made by the given caller
+
+            Options:
+                all: show all open calls
+                btc: show prices in BTC (default)
+                usd: show prices in USD
+            """
+            kwargs = cls.get_kwargs_from_args(ctx, *args)
+            await callbot.list_all_calls(ctx, **kwargs)
 
         @callbot.bot.command(pass_context=True)
         async def close(ctx, coin : str):
             """ Close an open call.
 
             Parameters:
-                coin: the coin to close the call on
+                [Required] coin: the coin to close the call on
             """
-            await callbot.close_call(ctx.message, coin)
+            await callbot.close_call(ctx, coin)
 
         callbot.run()

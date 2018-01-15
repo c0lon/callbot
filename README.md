@@ -1,46 +1,70 @@
 # callbot
+Discord bot that records crypto calls. All pricing information
+fetched using the [Coinmarketcap API](https://coinmarketcap.com/api).
 
-## features
-* create formatted call post based on a google doc
-* track calls
-* manage calls (list, close, update, etc)
+## Commands
 
-### different types of calls?
-* we have big shark calls but we also have smaller mrt or nate calls
-* big shark calls have more to them
-have one type of call. when building the call just skip the fields that don't apply.
-when displaying the call skip fields that are empty.
+### Make
+```
+!call make <coin>
 
-## call attributes 
+Make a call.
+The current price listed on Coinmarketcap will be recorded.
 
-### global
-* name
-* markets (auto)
-* current price (auto)
-* caller
+Arguments:
+    [Required] coin: The coin to make a call on
+```
 
-### little calls
-* hold time
-* target price
+### Show
+```
+!call show <coin> [args...]
 
-### big calls
-* description (catalysts, reasoning, etc)
-* risk/reward ratings
+Show the status of an open call. The current price is compared to
+the price recorded when the call was made.
 
-## commands
->>> !call make
-(interactive)
-name: <COIN_NAME>
-reason for call: <CALL_REASONING>
-stack percentage: <STACK_PERCENTAGE>
-coin description: <COIN_DESCRIPTION>
-risk: <RISK_RATING>
-reward: <REWARD_RATING>
-hold time: <HOLD_TIME>
-buy target: <BUY_TARGET>
-sell target: <SELL_TARGET>
+Arguments:
+    [Required] coin: The coin to check the call status of
+    caller:
+       show the open call on the given coin by the given caller
+       defaults to you
 
-periodically prove price updates and alert to big changes or increases in volum
+Options:
+    all: show all open calls on the given coin
+    btc: show prices in BTC (default)
+    usd: show prices in USD
+```
 
-run background task to update prices
-- integrate websocket apis?
+### Showlast
+```
+!call showlast [caller]
+
+Show the last call made.
+
+Arguments:
+    caller: show the last call made by the given caller
+```
+
+### List
+```
+!call list [args...]
+
+List open calls. If no options are given, lists your open calls.
+
+Arguments:
+    caller: show calls made by the given caller
+
+Options:
+    all: show all open calls
+    btc: show prices in BTC (default)
+    usd: show prices in USD
+```
+
+### Close
+```
+!call close <coin>
+
+Close an open call.
+
+Parameters:
+    [Required] coin: the coin to close the call on
+```

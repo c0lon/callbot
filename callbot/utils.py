@@ -4,6 +4,7 @@ from pprint import pprint
 
 import aiohttp
 from bs4 import BeautifulSoup
+import discord
 import requests
 
 
@@ -11,13 +12,17 @@ GREEN_ARROW_UP = '<:arup:361777443343958017>'
 RED_ARROW_DOWN = '<:ardn:361785982921736192>'
 
 
-def get_arrow(initial_value, final_value):
-    if final_value > initial_value:
+def get_arrow(percentage):
+    if percentage > 0.0:
         return GREEN_ARROW_UP
-    elif final_value == initial_value:
+    elif percentage == 0.0:
         return ''
     else:
         return RED_ARROW_DOWN
+
+
+def get_user(ctx, id_):
+    return discord.utils.get(ctx.message.server.members, id=id_)
 
 
 def fetch_url(url, params=None):
@@ -37,7 +42,7 @@ def fetch_url(url, params=None):
     return response
 
 
-def get_percent_change(start_value, end_value):
+def percent_change(start_value, end_value):
     return ((end_value - start_value) / start_value) * 100
 
 
