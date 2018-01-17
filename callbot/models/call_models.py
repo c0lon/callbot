@@ -1,10 +1,3 @@
-""" TODO
-- switch from specifying mine instead of seeing all
-    - show only mine by default, specify all
-- have green/red arrows pointing from call price to current price?
-"""
-
-
 from collections import namedtuple
 from datetime import datetime
 from queue import Queue
@@ -45,6 +38,20 @@ COINMARKETCAP_COIN_IMG_URL_FMT = 'https://files.coinmarketcap.com/static/img/coi
 COINMARKETCAP_API_URL_BASE = 'https://api.coinmarketcap.com/v1'
 COINMARKETCAP_API_TICKER_URL = COINMARKETCAP_API_URL_BASE + '/ticker'
 COINMARKETCAP_API_COIN_URL_FMT = COINMARKETCAP_API_TICKER_URL + '/{cmc_id}'
+
+def get_all_coins_ticker(to_dict=False):
+    api_response = fetch_url(COINMARKETCAP_API_TICKER_URL, params={'limit' : 0})
+    if not api_response:
+        return {} if to_dict else None
+
+    ticker = api_response.json()
+    if to_dict:
+        ticker_dict = {}
+        for coin_ticker in ticker:
+            ticker_dict[coin_ticker['id']] = coin_ticker
+        ticker = ticker_dict
+
+    return ticker
 
 TIMESTAMP_FMT = '%Y-%m-%d %H:%M UTC'
 
@@ -99,8 +106,12 @@ class Call(CallBase, GetLoggerMixin):
         return percent_change_btc, percent_change_usd
 
     @classmethod
-    def get_no_open_calls_embed(cls, session, ctx, caller_id=None, coin=None):
-        embed = discord.Embed(title='No Open Calls')
+    def get_no_calls_embed(cls, session, ctx, caller_id=None, coin=None, closed=False):
+        embed = discord.Embed()
+        if closed:
+            embed.title = 'No Closed Calls'
+        else:
+            embed.title = 'No Open Calls'
         if caller_id:
             caller = get_user(ctx, caller_id)
             embed.title += f' by {caller.name}'
@@ -163,7 +174,7 @@ class Call(CallBase, GetLoggerMixin):
 
                 if prices_in == 'btc':
                     arrow = get_arrow(percent_change_btc)
-                    name = f'{call.coin.name}{arrow} {abs(percent_change_btc):.2f} %'
+                    name = f'{call.coin.name} ({call.coin.symbol}) {arrow} {abs(percent_change_btc):.2f} %'
                     value = f'{call.start_price_btc:.8f} BTC -> {current_price_btc:.8f} BTC'
                     if not caller_id:
                         caller = call.get_caller(ctx)
@@ -174,7 +185,7 @@ class Call(CallBase, GetLoggerMixin):
                     value = f'$ {call.start_price_usd:.2f} -> $ {current_price_usd:.2f}'
                 embed.add_field(name=name, value=value, inline=False)
         else:
-            embed = cls.get_no_open_calls_embed(session, ctx, caller_id=caller_id)
+            embed = cls.get_no_calls_embed(session, ctx, caller_id=caller_id)
 
         return embed
 
@@ -197,7 +208,7 @@ class Call(CallBase, GetLoggerMixin):
     def get_by_coin_and_caller_embed(cls, session, ctx, coin, caller_id):
         call = cls.get_by_coin_and_caller(session, coin, caller_id)
         if not call:
-            return cls.get_no_open_calls_embed(session, ctx, coin=coin, caller_id=caller_id)
+            return cls.get_no_calls_embed(session, ctx, coin=coin, caller_id=caller_id)
 
         return call.get_embed(session, ctx)
 
@@ -219,7 +230,87 @@ class Call(CallBase, GetLoggerMixin):
         if call:
             embed = call.get_embed(session, ctx)
         else:
-            embed = cls.get_no_open_calls_embed(session, ctx, coin=coin, caller_id=caller_id)
+            embed = cls.get_no_calls_embed(session, ctx, coin=coin, caller_id=caller_id)
+
+        return embed
+
+    @classmethod
+    def get_best(cls, session, caller_id=None, closed=True, count=5):
+        best_calls = session.query(cls)
+
+        if closed:
+            return cls.get_best_closed(session, caller_id=caller_id, count=count)
+        else:
+            return cls.get_best_open(session, caller_id=caller_id, count=count)
+
+    @classmethod
+    def get(cls, session, caller_id=None, offset=None, closed=None, count=None, order_by=None):
+        calls = session.query(cls)
+        if closed is not None:
+            closed = 1 if closed else 0
+            calls = calls.filter(cls.closed == closed)
+        if order_by:
+            calls = calls.order_by(order_by())
+        if caller_id:
+            calls = calls.filter(cls.caller_id == caller_id)
+        if offset:
+            calls = calls.offset(offset)
+        if count:
+            calls = calls.limit(count)
+
+        return calls.all()
+
+    @classmethod
+    def get_best_open(cls, session, caller_id=None, count=5):
+        all_open_calls = cls.get(session, caller_id=caller_id, closed=False)
+        open_call_percent_changes = []
+        ticker = get_all_coins_ticker(to_dict=True)
+        for call in all_open_calls:
+            coin_ticker = ticker[call.coin.cmc_id]
+            current_price_btc, current_price_usd = float(coin_ticker['price_btc']), float(coin_ticker['price_usd'])
+            percent_change_btc, percent_change_usd = call.get_percent_change(current_price_btc, current_price_usd)
+            open_call_percent_changes.append((percent_change_btc, call))
+
+        sorted_call_percentages = sorted(open_call_percent_changes, key=lambda c: c[0], reverse=True)
+        sorted_calls = [s[1] for s in sorted_call_percentages]
+
+        return sorted_calls[:count]
+
+    @classmethod
+    def get_best_closed(cls, session, caller_id=None, count=5):
+        return cls.get(session, caller_id=caller_id, count=count,
+                closed=True, order_by=cls.total_percent_change_btc.desc)
+
+    @classmethod
+    def get_best_embed(cls, session, ctx, caller_id=None, count=5, closed=True, **kwargs):
+        best_calls = cls.get_best(session, caller_id=caller_id, closed=closed, count=count)
+        if not best_calls:
+            return cls.get_no_calls_embed(session, ctx, caller_id=caller_id, closed=closed)
+
+        open_or_closed = 'Closed' if closed else 'Open'
+        if len(best_calls) == 1:
+            title = f'Top {open_or_closed} Call'
+        else:
+            title = f'Top {len(best_calls)} {open_or_closed} Calls'
+        if caller_id:
+            caller = get_user(ctx, caller_id)
+            title += f' made by {caller.name}'
+
+        embed = discord.Embed(title=title)
+        for call in best_calls:
+            if closed:
+                end_price_btc = call.final_price_btc
+                percent_change_btc = call.total_percent_change_btc
+            else:
+                end_price_btc, _ = call.coin.current_price
+                percent_change_btc, _ = call.get_percent_change(end_price_btc, _)
+            arrow = get_arrow(percent_change_btc)
+            name = f'{call.coin.name} ({call.coin.symbol}) {arrow} {abs(percent_change_btc):.2f} %'
+            if not caller_id:
+                caller = call.get_caller(ctx)
+                name = f'[{caller.name}] {name}'
+            value = f'{call.start_price_btc:.8f} BTC -> {end_price_btc:.8f} BTC'
+            embed.add_field(name=name, value=value, inline=False)
 
         return embed
 
@@ -229,7 +320,7 @@ class Call(CallBase, GetLoggerMixin):
         if call:
             embed = call.get_embed(session, ctx)
         else:
-            embed = cls.get_no_open_calls_embed(session, ctx, coin=coin)
+            embed = cls.get_no_calls_embed(session, ctx, coin=coin)
 
         return embed
 
@@ -420,7 +511,7 @@ class Coin(CallBase, GetLoggerMixin):
             return Call.get_by_coin_and_caller_embed(session, ctx, self, caller_id)
 
         if not self.open_calls:
-            return Call.get_no_open_calls_embed(session, ctx, coin=self)
+            return Call.get_no_calls_embed(session, ctx, coin=self)
 
         embed = discord.Embed(title=f'All Open Calls on {self.name}', url=self.cmc_url)
         for call in self.open_calls:
@@ -445,7 +536,7 @@ class Coin(CallBase, GetLoggerMixin):
         caller_id = ctx.message.author.id
         call = Call.get_by_coin_and_caller(session, self, caller_id)
         if not call:
-            return Call.get_no_open_calls_embed(session, ctx, coin=self, caller_id=caller_id)
+            return Call.get_no_calls_embed(session, ctx, coin=self, caller_id=caller_id)
 
         return call.close_embed(session, ctx)
 
@@ -505,10 +596,7 @@ class Coin(CallBase, GetLoggerMixin):
 
     @classmethod
     def load_all_coins(cls, session, count=None):
-        api_response = fetch_url(COINMARKETCAP_API_TICKER_URL, params={'limit' : 0})
-        if not api_response:
-            return
-        coin_tickers = api_response.json()
+        coin_tickers = get_all_coins_ticker()
         tickers_by_symbol = {t['symbol']: t for t in coin_tickers}
         if count:
             coin_tickers = coin_tickers[:count]

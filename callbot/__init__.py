@@ -1,3 +1,9 @@
+""" TODO
+* add open/closed options to all commands
+
+"""
+
+
 from argparse import ArgumentParser
 import logging.config
 import os

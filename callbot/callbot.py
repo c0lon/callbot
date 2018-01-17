@@ -21,7 +21,7 @@ class Callbot(GetLoggerMixin):
         self.bot_token = config['token']
         self.debug = config.get('debug', False)
 
-    async def make_call(self, ctx, coin_string):
+    async def make_call(self, ctx, coin_string, **kwargs):
         logger = self._logger('make_call')
         logger.debug(coin_string)
 
@@ -40,7 +40,7 @@ class Callbot(GetLoggerMixin):
 
             await self.respond(ctx.message.channel, response)
 
-    async def show_call(self, ctx, coin_string, prices_in='btc', caller_id=None):
+    async def show_call(self, ctx, coin_string, prices_in='btc', caller_id=None, **kwargs):
         logger = self._logger('show_call')
         logger.debug(coin_string)
 
@@ -53,19 +53,19 @@ class Callbot(GetLoggerMixin):
 
             await self.respond(ctx.message.channel, response)
 
-    async def show_last_call(self, ctx, caller_id=None):
+    async def show_last_call(self, ctx, caller_id=None, **kwargs):
         logger = self._logger('show_last_call')
 
         with transaction(CallDBSession) as session:
             response = Call.get_last_embed(session, ctx, caller_id=caller_id)
             await self.respond(ctx.message.channel, response)
 
-    async def list_all_calls(self, ctx, prices_in='btc', caller_id=None):
+    async def list_all_calls(self, ctx, prices_in='btc', caller_id=None, **kwargs):
         with transaction(CallDBSession) as session:
             response = Call.get_all_open_embed(session, ctx, prices_in=prices_in, caller_id=caller_id)
             await self.respond(ctx.message.channel, response)
 
-    async def close_call(self, ctx, coin_string):
+    async def close_call(self, ctx, coin_string, **kwargs):
         with transaction(CallDBSession) as session:
             coin = Coin.find_one_by_string(session, coin_string)
             if isinstance(coin, Coin):
@@ -73,6 +73,11 @@ class Callbot(GetLoggerMixin):
             else:
                 response = coin
 
+            await self.respond(ctx.message.channel, response)
+
+    async def show_best(self, ctx, **kwargs):
+        with transaction(CallDBSession) as session:
+            response = Call.get_best_embed(session, ctx, **kwargs)
             await self.respond(ctx.message.channel, response)
 
     async def respond(self, target, content):
@@ -89,19 +94,33 @@ class Callbot(GetLoggerMixin):
         self.bot.run(self.bot_token)
 
     @classmethod
-    def get_kwargs_from_args(cls, ctx, *args):
-        prices_in = 'btc'
-        caller_id = ctx.message.author.id
+    def get_kwargs_from_args(cls, ctx, *args, **overrides):
+        kwargs = {
+            'prices_in' : 'btc',
+            'caller_id' : ctx.message.author.id,
+            'closed' : False
+        }
+        kwargs.update(overrides)
+
         for arg in args:
             if arg.lower() in ['btc', 'usd']:
-                prices_in = arg.lower()
-            else:
-                caller_id = Call.get_caller_id_from_string(ctx, arg)
+                kwargs['prices_in'] = arg.lower()
+                continue
 
-        return {
-            'prices_in' : prices_in,
-            'caller_id' : caller_id,
-        }
+            if arg.lower() == 'open':
+                kwargs['closed'] = False
+                continue
+            elif arg.lower() == 'closed':
+                kwargs['closed'] = True
+                continue
+
+            kwargs['caller_id'] = Call.get_caller_id_from_string(ctx, arg)
+            if kwargs['caller_id']: continue
+
+            # catch all
+            kwargs[arg] = arg
+
+        return kwargs
 
     @classmethod
     def watch_calls(cls, **config):
@@ -182,5 +201,17 @@ class Callbot(GetLoggerMixin):
                 [Required] coin: the coin to close the call on
             """
             await callbot.close_call(ctx, coin)
+
+        @callbot.bot.command(pass_context=True)
+        async def best(ctx, *args):
+            """ Show the best closed calls.
+
+            Arguments:
+                caller:
+                    show calls made by the given caller
+                    defaults to you
+            """
+            kwargs = cls.get_kwargs_from_args(ctx, *args)
+            await callbot.show_best(ctx, **kwargs)
 
         callbot.run()
