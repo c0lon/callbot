@@ -296,14 +296,17 @@ class Call(CallBase, GetLoggerMixin):
             caller = get_user(ctx, caller_id)
             title += f' made by {caller.name}'
 
+        if not closed:
+            ticker = get_all_coins_ticker(to_dict=True)
+
         embed = discord.Embed(title=title)
         for call in best_calls:
             if closed:
                 end_price_btc = call.final_price_btc
                 percent_change_btc = call.total_percent_change_btc
             else:
-                end_price_btc, _ = call.coin.current_price
-                percent_change_btc, _ = call.get_percent_change(end_price_btc, _)
+                end_price_btc = float(ticker[call.coin.cmc_id]['price_btc'])
+                percent_change_btc, _ = call.get_percent_change(end_price_btc, 0)
             arrow = get_arrow(percent_change_btc)
             name = f'{call.coin.name} ({call.coin.symbol}) {arrow} {abs(percent_change_btc):.2f} %'
             if not caller_id:
@@ -604,3 +607,11 @@ class Coin(CallBase, GetLoggerMixin):
         for coin_ticker in coin_tickers:
             if not cls.get_by_name(session, coin_ticker['name']):
                 coin = cls.add_from_ticker(session, coin_ticker)
+
+
+class UnseenCMCId(CallBase, GetLoggerMixin):
+    __tablename__ = 'unseen_cmc_ids'
+    __loggername__ = f'{__name__}.UnseenCMCId'
+
+    id = Column(Integer, primary_key=True)
+    cmc_id = Column(Text)

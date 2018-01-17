@@ -1,5 +1,10 @@
 """ TODO
 * add open/closed options to all commands
+* stay up to date with coinmarketcap
+  - anytime anything changes things can break
+
+* track current prices in database
+  - run background task to update coin prices
 
 """
 
