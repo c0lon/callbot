@@ -210,6 +210,10 @@ class Callbot(GetLoggerMixin):
                 caller:
                     show calls made by the given caller
                     defaults to you
+
+            Options:
+                closed: show best closed calls
+                open: show best open calls
             """
             kwargs = cls.get_kwargs_from_args(ctx, *args)
             await callbot.show_best(ctx, **kwargs)
