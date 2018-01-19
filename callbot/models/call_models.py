@@ -529,7 +529,7 @@ class Coin(CallBase, GetLoggerMixin):
             elif prices_in == 'usd':
                 arrow = get_arrow(percent_change_usd)
                 name = f'[{caller.name}] {self.name}{arrow} {abs(percent_change_usd):.2f} %'
-                value = f'$ {call.start_price_usd:.8f} -> $ {current_price_usd:.2f}'
+                value = f'$ {call.start_price_usd:.2f} -> $ {current_price_usd:.2f}'
 
             embed.add_field(name=name, value=value, inline=False)
 
