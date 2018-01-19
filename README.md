@@ -3,7 +3,6 @@ Discord bot that records crypto calls. All pricing information
 fetched using the [Coinmarketcap API](https://coinmarketcap.com/api).
 
 ## TODO
-* leaderboard for closed calls
 * restrict to certain channels
 
 ## Commands

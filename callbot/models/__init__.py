@@ -2,10 +2,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import configure_mappers
 
 from .meta import (
-    CallBase,
-    CallDBSession,
+    CallbotBase,
+    CallbotDBSession,
     )
-from .call_models import (
+from .models import (
     Call,
     Coin,
     )
@@ -21,4 +21,4 @@ def configure_database_connection(base, session_factory, **cnx_settings):
 
 
 def configure(**settings):
-    configure_database_connection(CallBase, CallDBSession, **settings['calls'])
+    configure_database_connection(CallbotBase, CallbotDBSession, **settings['callbot'])

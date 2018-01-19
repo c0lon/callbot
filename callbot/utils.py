@@ -27,6 +27,7 @@ def get_user(ctx, id_):
 
 def fetch_url(url, params=None):
     logger = logging.getLogger(f'{__name__}.fetch_url')
+    logger.debug(url, extra=params)
 
     params = params or {}
     try:

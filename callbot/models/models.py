@@ -1,17 +1,13 @@
-from collections import namedtuple
 from datetime import datetime
-from queue import Queue
-import threading as tr
+import time
 
 import discord
 from sqlalchemy import (
-    Boolean,
     Column,
     DateTime,
     Float,
     ForeignKey,
     Integer,
-    Table,
     Text,
     func,
     or_,
@@ -20,15 +16,15 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 
-from .meta import CallBase
+from .meta import CallbotBase
 from ..utils import (
     GetLoggerMixin,
     fetch_url,
     get_arrow,
     get_user,
     percent_change,
-    pp,
     )
+
 
 COINMARKETCAP_URL_BASE = 'https://coinmarketcap.com'
 COINMARKETCAP_COIN_URL_FMT = COINMARKETCAP_URL_BASE + '/currencies/{cmc_id}'
@@ -39,25 +35,11 @@ COINMARKETCAP_API_URL_BASE = 'https://api.coinmarketcap.com/v1'
 COINMARKETCAP_API_TICKER_URL = COINMARKETCAP_API_URL_BASE + '/ticker'
 COINMARKETCAP_API_COIN_URL_FMT = COINMARKETCAP_API_TICKER_URL + '/{cmc_id}'
 
-def get_all_coins_ticker(to_dict=False):
-    api_response = fetch_url(COINMARKETCAP_API_TICKER_URL, params={'limit' : 0})
-    if not api_response:
-        return {} if to_dict else None
-
-    ticker = api_response.json()
-    if to_dict:
-        ticker_dict = {}
-        for coin_ticker in ticker:
-            ticker_dict[coin_ticker['id']] = coin_ticker
-        ticker = ticker_dict
-
-    return ticker
-
 TIMESTAMP_FMT = '%Y-%m-%d %H:%M UTC'
 
-class Call(CallBase, GetLoggerMixin):
-    """ Model of a call made on a coin.
-    """
+
+class Call(CallbotBase, GetLoggerMixin):
+    """ Model of a call made on a coin. """
 
     __tablename__ = 'calls'
     __loggername__ = f'{__name__}.Call'
@@ -100,10 +82,17 @@ class Call(CallBase, GetLoggerMixin):
 
         return ctx.message.author.id
 
-    def get_percent_change(self, current_price_btc, current_price_usd):
-        percent_change_btc = percent_change(self.start_price_btc, current_price_btc)
-        percent_change_usd = percent_change(self.start_price_usd, current_price_usd)
-        return percent_change_btc, percent_change_usd
+    def get_percent_change_btc(self):
+        return percent_change(self.start_price_btc, self.coin.current_price_btc)
+    percent_change_btc = property(get_percent_change_btc)
+
+    def get_percent_change_usd(self):
+        return percent_change(self.start_price_usd, self.coin.current_price_usd)
+    percent_change_usd = property(get_percent_change_usd)
+
+    def get_percent_change(self):
+        return self.percent_change_btc, self.percent_change_usd
+    percent_change = property(get_percent_change)
 
     @classmethod
     def get_no_calls_embed(cls, session, ctx, caller_id=None, coin=None, closed=False):
@@ -169,20 +158,17 @@ class Call(CallBase, GetLoggerMixin):
                 embed.title += f' made by {caller.name}'
 
             for call in calls:
-                current_price_btc, current_price_usd = call.coin.current_price
-                percent_change_btc, percent_change_usd = call.get_percent_change(current_price_btc, current_price_usd)
-
                 if prices_in == 'btc':
-                    arrow = get_arrow(percent_change_btc)
-                    name = f'{call.coin.name} ({call.coin.symbol}) {arrow} {abs(percent_change_btc):.2f} %'
-                    value = f'{call.start_price_btc:.8f} BTC -> {current_price_btc:.8f} BTC'
+                    arrow = get_arrow(call.percent_change_btc)
+                    name = f'{call.coin.name} ({call.coin.symbol}) {arrow} {abs(call.percent_change_btc):.2f} %'
+                    value = f'{call.start_price_btc:.8f} BTC -> {call.coin.current_price_btc:.8f} BTC'
                     if not caller_id:
                         caller = call.get_caller(ctx)
                         name = f'[{caller.name}] {name}'
                 elif prices_in == 'usd':
-                    arrow = get_arrow(percent_change_usd)
-                    name = f'{call.coin.name}{arrow} {abs(percent_change_usd):.2f} %'
-                    value = f'$ {call.start_price_usd:.2f} -> $ {current_price_usd:.2f}'
+                    arrow = get_arrow(call.percent_change_usd)
+                    name = f'{call.coin.name}{arrow} {abs(call.percent_change_usd):.2f} %'
+                    value = f'$ {call.start_price_usd:.2f} -> $ {call.coin.current_price_usd:.2f}'
                 embed.add_field(name=name, value=value, inline=False)
         else:
             embed = cls.get_no_calls_embed(session, ctx, caller_id=caller_id)
@@ -263,16 +249,7 @@ class Call(CallBase, GetLoggerMixin):
     @classmethod
     def get_best_open(cls, session, caller_id=None, count=5):
         all_open_calls = cls.get(session, caller_id=caller_id, closed=False)
-        open_call_percent_changes = []
-        ticker = get_all_coins_ticker(to_dict=True)
-        for call in all_open_calls:
-            coin_ticker = ticker[call.coin.cmc_id]
-            current_price_btc, current_price_usd = float(coin_ticker['price_btc']), float(coin_ticker['price_usd'])
-            percent_change_btc, percent_change_usd = call.get_percent_change(current_price_btc, current_price_usd)
-            open_call_percent_changes.append((percent_change_btc, call))
-
-        sorted_call_percentages = sorted(open_call_percent_changes, key=lambda c: c[0], reverse=True)
-        sorted_calls = [s[1] for s in sorted_call_percentages]
+        sorted_calls = sorted(all_open_calls, key=lambda c: c.percent_change_btc, reverse=True)
 
         return sorted_calls[:count]
 
@@ -296,18 +273,16 @@ class Call(CallBase, GetLoggerMixin):
             caller = get_user(ctx, caller_id)
             title += f' made by {caller.name}'
 
-        if not closed:
-            ticker = get_all_coins_ticker(to_dict=True)
-
         embed = discord.Embed(title=title)
         for call in best_calls:
             if closed:
                 end_price_btc = call.final_price_btc
                 percent_change_btc = call.total_percent_change_btc
             else:
-                end_price_btc = float(ticker[call.coin.cmc_id]['price_btc'])
-                percent_change_btc, _ = call.get_percent_change(end_price_btc, 0)
-            arrow = get_arrow(percent_change_btc)
+                end_price_btc = call.coin.current_price_btc
+                percent_change_btc = call.percent_change_btc
+
+            arrow = get_arrow(call.percent_change_btc)
             name = f'{call.coin.name} ({call.coin.symbol}) {arrow} {abs(percent_change_btc):.2f} %'
             if not caller_id:
                 caller = call.get_caller(ctx)
@@ -329,25 +304,23 @@ class Call(CallBase, GetLoggerMixin):
 
     def get_embed(self, session, ctx):
         caller = get_user(ctx, self.caller_id)
-        embed = discord.Embed(title=f'[{caller.name}] Call on {self.coin.name} ({self.coin.symbol})', url=self.coin.cmc_url)
+        embed = discord.Embed(title=f'[{caller.name}] Call on {self.coin.name} ({self.coin.symbol})',
+                url=self.coin.cmc_url)
         embed.set_thumbnail(url=self.coin.cmc_image_url)
 
-        current_price_btc, current_price_usd = self.coin.current_price
-        percent_change_btc, percent_change_usd = self.get_percent_change(current_price_btc, current_price_usd)
-
         # show percent changes
-        btc_arrow = get_arrow(percent_change_btc)
+        btc_arrow = get_arrow(self.percent_change_btc)
         embed.add_field(name='Percent change (BTC)',
-                value=f'{btc_arrow}{abs(percent_change_btc):.2f} %')
+                value=f'{btc_arrow}{abs(self.percent_change_btc):.2f} %')
         usd_arrow = get_arrow(percent_change_usd)
         embed.add_field(name='Percent Change (USD)',
-                value=f'{usd_arrow}{abs(percent_change_usd):.2f} %')
+                value=f'{usd_arrow}{abs(self.percent_change_usd):.2f} %')
 
         # show current prices
         embed.add_field(name='Current Price (BTC)',
-                value=f'{current_price_btc:.8f} BTC')
+                value=f'{self.current_price_btc:.8f} BTC')
         embed.add_field(name='Current Price (USD)',
-                value=f'$ {current_price_usd:.2f}')
+                value=f'$ {self.current_price_usd:.2f}')
 
         # show call prices
         embed.add_field(name='Call Price (BTC)',
@@ -362,14 +335,10 @@ class Call(CallBase, GetLoggerMixin):
 
     def close(self, session):
         self.closed = 1
-
-        current_price_btc, current_price_usd = self.coin.current_price
-        self.final_price_btc = current_price_btc
-        self.final_price_usd = current_price_usd
-
-        percent_change_btc, percent_change_usd = self.get_percent_change(current_price_btc, current_price_usd)
-        self.total_percent_change_btc = percent_change_btc
-        self.total_percent_change_usd = percent_change_usd
+        self.final_price_btc = self.coin.current_price_btc
+        self.final_price_usd = self.coin.current_price_usd
+        self.total_percent_change_btc = self.percent_change_btc
+        self.total_percent_change_usd = self.percent_change_usd
 
     def close_embed(self, session, ctx):
         self.close(session)
@@ -405,23 +374,41 @@ class Call(CallBase, GetLoggerMixin):
         return embed
 
 
-class Coin(CallBase, GetLoggerMixin):
-    """ Model of a Coin on Coinmarketcap.
-    """
+class Coin(CallbotBase, GetLoggerMixin):
+    """ Model of a Coin on Coinmarketcap. """
 
-    __tablename__ = 'coins'
+    """ Coinmarketcap attributes """
     __loggername__ = f'{__name__}.Coin'
 
-    id = Column(Integer, primary_key=True)
-    name = Column(Text, index=True)
-    symbol = Column(Text, index=True)
-    cmc_id = Column(Text)
+    TICKER = {}
+    TICKER_TTL = 10
+    TICKER_LAST_UPDATE = 0
 
-    calls = relationship('Call', back_populates='coin')
+    @classmethod
+    def get_global_ticker(cls):
+        """ Fetch the ticker for all coins.
+        If the ticker is empty or stale, fetch it from coinmarketcap.
+        """
+        if not cls.TICKER or time.time() - cls.TICKER_LAST_UPDATE > cls.TICKER_TTL:
+            cls.update_global_ticker()
+            cls.TICKER_LAST_UPDATE = time.time()
 
-    def get_open_calls(self):
-        return [c for c in self.calls if not c.closed]
-    open_calls = property(get_open_calls)
+        return cls.TICKER
+
+    @classmethod
+    def update_global_ticker(cls):
+        """ Fetch the global ticker from coinmarketcap. """
+        api_response = fetch_url(COINMARKETCAP_API_TICKER_URL, params={'limit' : 0})
+        if not api_response:
+            return {} if to_dict else None
+
+        ticker = api_response.json()
+        ticker_dict = {}
+        for coin_ticker in ticker:
+            ticker_dict[coin_ticker['id']] = coin_ticker
+        cls.TICKER = ticker_dict
+
+        return cls.TICKER
 
     def get_cmc_url(self):
         return COINMARKETCAP_COIN_MARKETS_URL_FMT.format(cmc_id=self.cmc_id)
@@ -435,30 +422,40 @@ class Coin(CallBase, GetLoggerMixin):
         return COINMARKETCAP_COIN_IMG_URL_FMT.format(cmc_id=self.cmc_id)
     cmc_image_url = property(get_cmc_image_url)
 
+    def get_current_price_btc(self):
+        coin_ticker = Coin.get_global_ticker().get(self.cmc_id)
+        if not coin_ticker:
+            # TODO
+            return 0.0
+        return float(coin_ticker['price_btc'])
+    current_price_btc = property(get_current_price_btc)
+
+    def get_current_price_usd(self):
+        ticker = Coin.get_global_ticker()
+        coin_ticker = ticker.get(self.cmc_id)
+        if not coin_ticker:
+            # TODO
+            return 0.0
+        return float(coin_ticker['price_usd'])
+    current_price_usd = property(get_current_price_usd)
+
     def get_current_price(self):
-        logger = self._logger('get_prices')
-        logger.debug(self.name)
-
-        api_response = fetch_url(self.cmc_api_url)
-        if not api_response:
-            return
-        ticker = api_response.json()[0]
-
-        # warn if the price is set to NULL
-        try:
-            price_btc = float(ticker['price_btc'])
-        except:
-            logger.warning(f'{self.name} BTC price is NULL')
-            price_btc = None
-        try:
-            price_usd = float(ticker['price_usd'])
-        except:
-            logger.warning(f'{self.name} USD price is NULL')
-            price_usd = None
-
-        return price_btc, price_usd
-
+        return self.current_price_btc, self.current_price_usd
     current_price = property(get_current_price)
+
+    """ SQLAlchemy attributes """
+    __tablename__ = 'coins'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(Text, index=True)
+    symbol = Column(Text, index=True)
+    cmc_id = Column(Text)
+
+    calls = relationship('Call', back_populates='coin')
+
+    def get_open_calls(self):
+        return [c for c in self.calls if not c.closed]
+    open_calls = property(get_open_calls)
 
     @classmethod
     def get_by_name(cls, session, coin_name):
@@ -470,6 +467,12 @@ class Coin(CallBase, GetLoggerMixin):
     def get_by_symbol(cls, session, coin_symbol):
         return session.query(cls) \
                 .filter(cls.symbol == coin_symbol) \
+                .first()
+
+    @classmethod
+    def get_by_cmc_id(cls, session, coin_cmc_id):
+        return session.query(cls) \
+                .filter(cls.cmc_id == coin_cmc_id) \
                 .first()
 
     @classmethod
@@ -519,17 +522,14 @@ class Coin(CallBase, GetLoggerMixin):
         embed = discord.Embed(title=f'All Open Calls on {self.name}', url=self.cmc_url)
         for call in self.open_calls:
             caller = call.get_caller(ctx)
-            current_price_btc, current_price_usd = self.current_price
-            percent_change_btc, percent_change_usd = call.get_percent_change(current_price_btc, current_price_usd)
-            
             if prices_in == 'btc':
                 arrow = get_arrow(percent_change_btc)
-                name = f'[{caller.name}] {self.name}{arrow} {abs(percent_change_btc):.2f} %'
-                value = f'{call.start_price_btc:.8f} BTC -> {current_price_btc:.8f} BTC'
+                name = f'[{caller.name}] {self.name}{arrow} {abs(call.percent_change_btc):.2f} %'
+                value = f'{call.start_price_btc:.8f} BTC -> {call.coin.current_price_btc:.8f} BTC'
             elif prices_in == 'usd':
                 arrow = get_arrow(percent_change_usd)
-                name = f'[{caller.name}] {self.name}{arrow} {abs(percent_change_usd):.2f} %'
-                value = f'$ {call.start_price_usd:.2f} -> $ {current_price_usd:.2f}'
+                name = f'[{caller.name}] {self.name}{arrow} {abs(call.percent_change_usd):.2f} %'
+                value = f'$ {call.start_price_usd:.2f} -> $ {call.coin.current_price_usd:.2f}'
 
             embed.add_field(name=name, value=value, inline=False)
 
@@ -598,20 +598,7 @@ class Coin(CallBase, GetLoggerMixin):
         return response
 
     @classmethod
-    def load_all_coins(cls, session, count=None):
-        coin_tickers = get_all_coins_ticker()
-        tickers_by_symbol = {t['symbol']: t for t in coin_tickers}
-        if count:
-            coin_tickers = coin_tickers[:count]
-
-        for coin_ticker in coin_tickers:
-            if not cls.get_by_name(session, coin_ticker['name']):
+    def load_all_coins(cls, session):
+        for coin_cmc_id, coin_ticker in cls.get_global_ticker().items():
+            if not cls.get_by_cmc_id(session, coin_cmc_id):
                 coin = cls.add_from_ticker(session, coin_ticker)
-
-
-class UnseenCMCId(CallBase, GetLoggerMixin):
-    __tablename__ = 'unseen_cmc_ids'
-    __loggername__ = f'{__name__}.UnseenCMCId'
-
-    id = Column(Integer, primary_key=True)
-    cmc_id = Column(Text)

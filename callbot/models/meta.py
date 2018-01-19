@@ -17,8 +17,8 @@ NAMING_CONVENTION = {
 
 
 metadata = MetaData(naming_convention=NAMING_CONVENTION)
-CallBase = declarative_base(metadata=metadata)
-CallDBSession = sessionmaker()
+CallbotBase = declarative_base(metadata=metadata)
+CallbotDBSession = sessionmaker()
 
 
 @contextmanager
@@ -52,5 +52,5 @@ def transaction(session_factory, commit=True):
 
 
 def initialize_database():
-    CallBase.metadata.drop_all()
-    CallBase.metadata.create_all()
+    CallbotBase.metadata.drop_all()
+    CallbotBase.metadata.create_all()

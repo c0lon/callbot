@@ -2,10 +2,10 @@ import discord
 from discord.ext import commands
 
 from .models.meta import (
-    CallDBSession,
+    CallbotDBSession,
     transaction,
     )
-from .models.call_models import (
+from .models import (
     Call,
     Coin,
     )
@@ -25,7 +25,7 @@ class Callbot(GetLoggerMixin):
         logger = self._logger('make_call')
         logger.debug(coin_string)
 
-        with transaction(CallDBSession) as session:
+        with transaction(CallbotDBSession) as session:
             coin = Coin.find_one_by_string(session, coin_string)
             if isinstance(coin, Coin):
                 call = Call.get_by_coin_and_caller(session, coin, ctx.message.author.id)
@@ -44,7 +44,7 @@ class Callbot(GetLoggerMixin):
         logger = self._logger('show_call')
         logger.debug(coin_string)
 
-        with transaction(CallDBSession) as session:
+        with transaction(CallbotDBSession) as session:
             coin = Coin.find_one_by_string(session, coin_string)
             if isinstance(coin, Coin):
                 response = coin.get_calls_embed(session, ctx, prices_in=prices_in, caller_id=caller_id)
@@ -56,17 +56,17 @@ class Callbot(GetLoggerMixin):
     async def show_last_call(self, ctx, caller_id=None, **kwargs):
         logger = self._logger('show_last_call')
 
-        with transaction(CallDBSession) as session:
+        with transaction(CallbotDBSession) as session:
             response = Call.get_last_embed(session, ctx, caller_id=caller_id)
             await self.respond(ctx.message.channel, response)
 
     async def list_all_calls(self, ctx, prices_in='btc', caller_id=None, **kwargs):
-        with transaction(CallDBSession) as session:
+        with transaction(CallbotDBSession) as session:
             response = Call.get_all_open_embed(session, ctx, prices_in=prices_in, caller_id=caller_id)
             await self.respond(ctx.message.channel, response)
 
     async def close_call(self, ctx, coin_string, **kwargs):
-        with transaction(CallDBSession) as session:
+        with transaction(CallbotDBSession) as session:
             coin = Coin.find_one_by_string(session, coin_string)
             if isinstance(coin, Coin):
                 response = coin.close_call_by_caller(session, ctx)
@@ -76,7 +76,7 @@ class Callbot(GetLoggerMixin):
             await self.respond(ctx.message.channel, response)
 
     async def show_best(self, ctx, **kwargs):
-        with transaction(CallDBSession) as session:
+        with transaction(CallbotDBSession) as session:
             response = Call.get_best_embed(session, ctx, **kwargs)
             await self.respond(ctx.message.channel, response)
 
@@ -133,10 +133,6 @@ class Callbot(GetLoggerMixin):
 
         @callbot.bot.event
         async def on_message(message):
-            """ Do any preprocessing here.
-
-            Restrict to certain channels?
-            """
             await callbot.bot.process_commands(message)
 
         @callbot.bot.command(pass_context=True)
