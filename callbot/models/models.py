@@ -400,7 +400,7 @@ class Coin(CallbotBase, GetLoggerMixin):
         """ Fetch the global ticker from coinmarketcap. """
         api_response = fetch_url(COINMARKETCAP_API_TICKER_URL, params={'limit' : 0})
         if not api_response:
-            return {} if to_dict else None
+            return {}
 
         ticker = api_response.json()
         ticker_dict = {}
