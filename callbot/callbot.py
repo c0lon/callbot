@@ -1,3 +1,6 @@
+import threading as tr
+import time
+
 import discord
 from discord.ext import commands
 
@@ -19,7 +22,20 @@ class Callbot(GetLoggerMixin):
     def __init__(self, **config):
         self.bot = commands.Bot(command_prefix=config['command_prefix'])
         self.bot_token = config['token']
+        self.update_interval = config['update_interval']
         self.debug = config.get('debug', False)
+
+        tr.Thread(target=self.load_coins_in_background).start()
+
+    def load_coins_in_background(self):
+        logger = self._logger('load_all_coins')
+
+        while True:
+            logger.debug('start')
+            with transaction(CallbotDBSession) as session:
+                Coin.load_all_coins(session)
+            logger.debug('finish')
+            time.sleep(self.update_interval)
 
     async def make_call(self, ctx, coin_string, **kwargs):
         logger = self._logger('make_call')
