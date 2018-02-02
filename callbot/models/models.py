@@ -133,6 +133,7 @@ class Call(CallbotBase, GetLoggerMixin):
     def make_embed(cls, session, ctx, coin):
         call = cls.make(session, ctx, coin)
         embed = discord.Embed(title=f'Call made on {call.coin.name} ({call.coin.symbol})', url=call.coin.cmc_url)
+        embed.set_thumbnail(call.coin.cmc_image_url)
         embed.add_field(name='Price (BTC)',
                 value=f'{call.start_price_btc:.8f} BTC')
         embed.add_field(name='Price (USD)',
