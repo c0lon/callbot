@@ -319,9 +319,9 @@ class Call(CallbotBase, GetLoggerMixin):
 
         # show current prices
         embed.add_field(name='Current Price (BTC)',
-                value=f'{self.current_price_btc:.8f} BTC')
+                value=f'{self.coin.current_price_btc:.8f} BTC')
         embed.add_field(name='Current Price (USD)',
-                value=f'$ {self.current_price_usd:.2f}')
+                value=f'$ {self.coin.current_price_usd:.2f}')
 
         # show call prices
         embed.add_field(name='Call Price (BTC)',
@@ -521,10 +521,11 @@ class Coin(CallbotBase, GetLoggerMixin):
             return Call.get_no_calls_embed(session, ctx, coin=self)
 
         embed = discord.Embed(title=f'All Open Calls on {self.name}', url=self.cmc_url)
+        embed.set_thumbnail(url=call.coin.cmc_image_url)
         for call in self.open_calls:
             caller = call.get_caller(ctx)
             if prices_in == 'btc':
-                arrow = get_arrow(percent_change_btc)
+                arrow = get_arrow(call.percent_change_btc)
                 name = f'[{caller.name}] {self.name}{arrow} {abs(call.percent_change_btc):.2f} %'
                 value = f'{call.start_price_btc:.8f} BTC -> {call.coin.current_price_btc:.8f} BTC'
             elif prices_in == 'usd':
