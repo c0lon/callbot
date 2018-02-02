@@ -313,7 +313,7 @@ class Call(CallbotBase, GetLoggerMixin):
         btc_arrow = get_arrow(self.percent_change_btc)
         embed.add_field(name='Percent change (BTC)',
                 value=f'{btc_arrow}{abs(self.percent_change_btc):.2f} %')
-        usd_arrow = get_arrow(percent_change_usd)
+        usd_arrow = get_arrow(self.percent_change_usd)
         embed.add_field(name='Percent Change (USD)',
                 value=f'{usd_arrow}{abs(self.percent_change_usd):.2f} %')
 
