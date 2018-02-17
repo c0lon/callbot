@@ -161,6 +161,12 @@ class Callbot(GetLoggerMixin):
         async def on_message(message):
             await callbot.bot.process_commands(message)
 
+        @callbot.bot.event
+        async def on_disconnect():
+            logger.warning('bot disconnected')
+            await callbot.bot.connect()
+            logger.debug('bot reconnected')
+
         @callbot.bot.command(pass_context=True)
         async def make(ctx, coin : str):
             """ Make a call.
