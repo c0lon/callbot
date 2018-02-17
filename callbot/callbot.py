@@ -39,7 +39,7 @@ class Callbot(GetLoggerMixin):
 
     async def make_call(self, ctx, coin_string, **kwargs):
         logger = self._logger('make_call')
-        logger.debug(coin_string)
+        logger.debug('{}: {}'.format(ctx.message.author, coin_string))
 
         with transaction(CallbotDBSession) as session:
             coin = Coin.find_one_by_string(session, coin_string)
@@ -71,17 +71,24 @@ class Callbot(GetLoggerMixin):
 
     async def show_last_call(self, ctx, caller_id=None, **kwargs):
         logger = self._logger('show_last_call')
+        logger.debug(ctx.author.name)
 
         with transaction(CallbotDBSession) as session:
             response = Call.get_last_embed(session, ctx, caller_id=caller_id)
             await self.respond(ctx.message.channel, response)
 
     async def list_all_calls(self, ctx, prices_in='btc', caller_id=None, **kwargs):
+        logger = self._logger('list_all_calls')
+        logger.debug(ctx.message.author.name)
+
         with transaction(CallbotDBSession) as session:
             response = Call.get_all_open_embed(session, ctx, prices_in=prices_in, caller_id=caller_id)
             await self.respond(ctx.message.channel, response)
 
     async def close_call(self, ctx, coin_string, **kwargs):
+        logger = self._logger('close_call')
+        logger.debug(coin_string)
+
         with transaction(CallbotDBSession) as session:
             coin = Coin.find_one_by_string(session, coin_string)
             if isinstance(coin, Coin):
@@ -92,6 +99,9 @@ class Callbot(GetLoggerMixin):
             await self.respond(ctx.message.channel, response)
 
     async def show_best(self, ctx, **kwargs):
+        logger = self._logger('show_best')
+        logger.debug(ctx.message.author)
+
         with transaction(CallbotDBSession) as session:
             response = Call.get_best_embed(session, ctx, **kwargs)
             await self.respond(ctx.message.channel, response)
