@@ -41,7 +41,6 @@ def transaction(session_factory, commit=True):
     except:
         logger.error('error', exc_info=True, extra=extra)
         session.rollback()
-        raise
     else:
         if commit:
             logger.debug('commit', extra=extra)
