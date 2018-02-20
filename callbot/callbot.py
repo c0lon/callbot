@@ -1,3 +1,4 @@
+import asyncio
 import threading as tr
 import time
 
@@ -19,23 +20,24 @@ class Callbot(GetLoggerMixin):
     NAME = 'Callbot'
     __loggername__ = f'{__name__}.{NAME}'
 
-    def __init__(self, **config):
-        self.bot = commands.Bot(command_prefix=config['command_prefix'])
-        self.bot_token = config['token']
-        self.update_interval = config['update_interval']
-        self.debug = config.get('debug', False)
+    def __init__(self, **kwargs):
+        self.bot = commands.Bot(command_prefix=kwargs['command_prefix'])
+        self.bot_token = kwargs['token']
+        self.update_interval = kwargs['update_interval']
+        self.debug = kwargs.get('debug', False)
 
-        tr.Thread(target=self.load_coins_in_background).start()
+        loop = kwargs.get('loop', asyncio.get_event_loop())
+        loop.create_task(self.load_coins_in_background())
 
-    def load_coins_in_background(self):
+    async def load_coins_in_background(self):
         logger = self._logger('load_all_coins')
 
         while True:
             logger.debug('start')
             with transaction(CallbotDBSession) as session:
-                Coin.load_all_coins(session)
+                await Coin.load_all_coins(session)
             logger.debug('finish')
-            time.sleep(self.update_interval)
+            await asyncio.sleep(self.update_interval)
 
     async def make_call(self, ctx, coin_string, **kwargs):
         logger = self._logger('make_call')
@@ -164,7 +166,8 @@ class Callbot(GetLoggerMixin):
         @callbot.bot.event
         async def on_disconnect():
             logger.warning('bot disconnected')
-            await callbot.bot.connect()
+            #await callbot.bot.connect()
+            import sys; sys.exit(1)
             logger.debug('bot reconnected')
 
         @callbot.bot.command(pass_context=True)

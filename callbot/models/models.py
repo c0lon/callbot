@@ -16,26 +16,24 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 
-from .meta import CallbotBase
+from .meta import (
+    CallbotBase,
+    )
 from ..utils import (
+    COINMARKETCAP_URL_BASE,
+    COINMARKETCAP_COIN_URL_FMT,
+    COINMARKETCAP_COIN_MARKETS_URL_FMT,
+    COINMARKETCAP_COIN_IMG_URL_FMT,
+    COINMARKETCAP_API_URL_BASE,
+    COINMARKETCAP_API_TICKER_URL,
+    COINMARKETCAP_API_COIN_URL_FMT,
+    TIMESTAMP_FMT,
     GetLoggerMixin,
-    fetch_url,
     get_arrow,
+    get_cmc_global_ticker,
     get_user,
     percent_change,
     )
-
-
-COINMARKETCAP_URL_BASE = 'https://coinmarketcap.com'
-COINMARKETCAP_COIN_URL_FMT = COINMARKETCAP_URL_BASE + '/currencies/{cmc_id}'
-COINMARKETCAP_COIN_MARKETS_URL_FMT = COINMARKETCAP_COIN_URL_FMT + '/#markets'
-COINMARKETCAP_COIN_IMG_URL_FMT = 'https://files.coinmarketcap.com/static/img/coins/32x32/{cmc_id}.png'
-
-COINMARKETCAP_API_URL_BASE = 'https://api.coinmarketcap.com/v1'
-COINMARKETCAP_API_TICKER_URL = COINMARKETCAP_API_URL_BASE + '/ticker'
-COINMARKETCAP_API_COIN_URL_FMT = COINMARKETCAP_API_TICKER_URL + '/{cmc_id}'
-
-TIMESTAMP_FMT = '%Y-%m-%d %H:%M UTC'
 
 
 class Call(CallbotBase, GetLoggerMixin):
@@ -386,24 +384,20 @@ class Coin(CallbotBase, GetLoggerMixin):
     TICKER_LAST_UPDATE = 0
 
     @classmethod
-    def get_global_ticker(cls):
+    async def get_global_ticker(cls):
         """ Fetch the ticker for all coins.
         If the ticker is empty or stale, fetch it from coinmarketcap.
         """
         if not cls.TICKER or time.time() - cls.TICKER_LAST_UPDATE > cls.TICKER_TTL:
-            cls.update_global_ticker()
+            await cls.update_global_ticker()
             cls.TICKER_LAST_UPDATE = time.time()
 
         return cls.TICKER
 
     @classmethod
-    def update_global_ticker(cls):
+    async def update_global_ticker(cls):
         """ Fetch the global ticker from coinmarketcap. """
-        api_response = fetch_url(COINMARKETCAP_API_TICKER_URL, params={'limit' : 0})
-        if not api_response:
-            return {}
-
-        ticker = api_response.json()
+        ticker = await get_cmc_global_ticker()
         ticker_dict = {}
         for coin_ticker in ticker:
             ticker_dict[coin_ticker['id']] = coin_ticker
@@ -424,7 +418,7 @@ class Coin(CallbotBase, GetLoggerMixin):
     cmc_image_url = property(get_cmc_image_url)
 
     def get_current_price_btc(self):
-        coin_ticker = Coin.get_global_ticker().get(self.cmc_id)
+        coin_ticker = Coin.TICKER.get(self.cmc_id)
         if not coin_ticker:
             # TODO
             return 0.0
@@ -432,8 +426,7 @@ class Coin(CallbotBase, GetLoggerMixin):
     current_price_btc = property(get_current_price_btc)
 
     def get_current_price_usd(self):
-        ticker = Coin.get_global_ticker()
-        coin_ticker = ticker.get(self.cmc_id)
+        coin_ticker = Coin.TICKER.get(self.cmc_id)
         if not coin_ticker:
             # TODO
             return 0.0
@@ -600,7 +593,8 @@ class Coin(CallbotBase, GetLoggerMixin):
         return response
 
     @classmethod
-    def load_all_coins(cls, session):
-        for coin_cmc_id, coin_ticker in cls.get_global_ticker().items():
+    async def load_all_coins(cls, session):
+        global_ticker = await cls.get_global_ticker()
+        for coin_cmc_id, coin_ticker in global_ticker.items():
             if not cls.get_by_cmc_id(session, coin_cmc_id):
                 coin = cls.add_from_ticker(session, coin_ticker)
