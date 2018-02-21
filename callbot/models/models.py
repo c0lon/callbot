@@ -156,7 +156,8 @@ class Call(CallbotBase, GetLoggerMixin):
                 caller = get_user(ctx, caller_id)
                 embed.title += f' made by {caller.name}'
 
-            for call in calls:
+            open_calls = sorted(calls, key=lambda c: c.percent_change_btc, reverse=True)
+            for call in open_calls:
                 if prices_in == 'btc':
                     arrow = get_arrow(call.percent_change_btc)
                     name = f'{call.coin.name} ({call.coin.symbol}) {arrow} {abs(call.percent_change_btc):.2f} %'
@@ -515,7 +516,8 @@ class Coin(CallbotBase, GetLoggerMixin):
 
         embed = discord.Embed(title=f'All Open Calls on {self.name}', url=self.cmc_url)
         embed.set_thumbnail(url=self.cmc_image_url)
-        for call in self.open_calls:
+        open_calls = sorted(self.open_calls, key=lambda c: c.percent_change_btc, reverse=True)
+        for call in open_calls:
             caller = call.get_caller(ctx)
             if prices_in == 'btc':
                 arrow = get_arrow(call.percent_change_btc)
