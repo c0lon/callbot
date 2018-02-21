@@ -36,6 +36,9 @@ from ..utils import (
     )
 
 
+EMBED_CALL_LIMIT = 20
+
+
 class Call(CallbotBase, GetLoggerMixin):
     """ Model of a call made on a coin. """
 
@@ -157,7 +160,7 @@ class Call(CallbotBase, GetLoggerMixin):
                 embed.title += f' made by {caller.name}'
 
             open_calls = sorted(calls, key=lambda c: c.percent_change_btc, reverse=True)
-            for call in open_calls:
+            for call in open_calls[:EMBED_CALL_LIMIT]:
                 if prices_in == 'btc':
                     arrow = get_arrow(call.percent_change_btc)
                     name = f'{call.coin.name} ({call.coin.symbol}) {arrow} {abs(call.percent_change_btc):.2f} %'
